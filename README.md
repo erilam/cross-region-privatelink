@@ -1,7 +1,7 @@
-**<h1>Creating a Cross-Region VPC PrivateLink using VPC Peering with Terraform (Draft, work in progress)</h1>**
+**<h1>Creating an AWS Cross-Region VPC PrivateLink using VPC Peering with Terraform (Draft, work in progress)</h1>**
 
 **<h2>Description</h2>**
-This blog post provides a step-by-step guide on setting up a cross-region VPC PrivateLink using VPC peering for SaaS providers who host their platform in one AWS region while serving customers in another region. The setup ensures secure and efficient access to the SaaS platform via AWS PrivateLink, avoiding traffic traversing the public internet. The post covers creating separate AWS accounts for the provider and customer, setting up Terraform configurations and variables, deploying a static website using an autoscaling group for the provider, establishing VPC peering between the provider's regions, and setting up PrivateLink for both the provider and customer.
+This blog post provides a step-by-step guide on setting up an AWS cross-region VPC PrivateLink using VPC peering for SaaS providers who host their platform in one AWS region while serving customers in another region. The setup ensures secure and efficient access to the SaaS platform via AWS PrivateLink, avoiding traffic traversing the public internet. The post covers creating separate AWS accounts for the provider and customer, setting up Terraform configurations and variables, deploying a static website using an autoscaling group for the provider, establishing VPC peering between the provider's regions, and setting up PrivateLink for both the provider and customer.
 
 **<h3>Introduction</h3>**
 
