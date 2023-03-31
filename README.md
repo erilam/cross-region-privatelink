@@ -344,14 +344,17 @@ Run terraform apply to create the endpoint service in the SaaS provider's EU-WES
 By completing step 5, you have successfully created an endpoint service in the SaaS provider's EU-WEST-2 region, allowing customers in the EU-WEST-2 region to access the SaaS provider's static website over AWS PrivateLink.
 
 **<h3>Step 6: Set up the customer's infrastructure in the EU-WEST-2 region</h3>**
-In this step, we will set up the customer's infrastructure in the EU-WEST-2 region. This includes creating a VPC and a security group. We will use Terraform to automate the creation of these resources.
+In this step, we will configure the customer's VPC in the EU-WEST-2 region, including creating a VPC, a subnet, and a security group. The security group will allow RDP access to the Windows instances for testing the provider's static website.
+
+Remark: When using AWS PrivateLink, it is possible to have overlapping CIDR ranges for the customer and provider VPCs. Since PrivateLink works on a higher level using service endpoints, it does not rely on IP addresses to establish connectivity, and thus IP address conflicts are not a concern in this case. However, while it is possible, we should use non-overlapping CIDR ranges if allowed.
 
 Create a file called cust_eu2_infra.tf and add the following code:
+
 ```
 resource "aws_vpc" "cust_eu2_vpc" {
   provider = aws.cust_eu2
 
-  cidr_block = "192.168.0.0/16"
+  cidr_block = "10.1.0.0/16"
 
   tags = {
     Name = "cust-eu2-vpc"
@@ -361,7 +364,7 @@ resource "aws_vpc" "cust_eu2_vpc" {
 resource "aws_subnet" "cust_eu2_subnet" {
   provider = aws.cust_eu2
 
-  cidr_block = "192.168.1.0/24"
+  cidr_block = "10.1.1.0/24"
   vpc_id     = aws_vpc.cust_eu2_vpc.id
 
   tags = {
@@ -373,18 +376,18 @@ resource "aws_security_group" "cust_eu2_sg" {
   provider = aws.cust_eu2
 
   name        = "cust-eu2-sg"
-  description = "Security group for the customer's access to the SaaS provider's static website in EU-WEST-2"
+  description = "Security group for the customer's instances in EU-WEST-2"
   vpc_id      = aws_vpc.cust_eu2_vpc.id
 }
 
-resource "aws_security_group_rule" "cust_eu2_sg_allow_http" {
+resource "aws_security_group_rule" "cust_eu2_sg_allow_rdp" {
   provider = aws.cust_eu2
 
   security_group_id = aws_security_group.cust_eu2_sg.id
 
   type        = "ingress"
-  from_port   = 80
-  to_port     = 80
+  from_port   = 3389
+  to_port     = 3389
   protocol    = "tcp"
   cidr_blocks = ["0.0.0.0/0"]
 }
@@ -434,32 +437,17 @@ Run terraform apply to create the VPC endpoint in the customer's EU-WEST-2 regio
 By completing step 7, you have successfully created a VPC endpoint in the customer's EU-WEST-2 region and connected it to the SaaS provider's endpoint service. This allows the customer to access the SaaS provider's static website over AWS PrivateLink, even though the SaaS provider's platform is only deployed in the EU-WEST-1 region.
 
 **<h3>Step 8: Test the connection between the customer's VPC endpoint and the SaaS provider's static website</h3>**
-In this final step, we will test the connection between the customer's VPC endpoint and the SaaS provider's static website hosted on the autoscaling EC2 instances in the EU-WEST-1 region.
+In this step, we will launch a Windows EC2 instance in the customer's VPC in the EU-WEST-2 region to test the PrivateLink connection to the SaaS provider's static website.
 
-Create an EC2 instance in the customer's EU-WEST-2 region with the following configurations:
+Create a new Windows EC2 instance in the customer's VPC in the EU-WEST-2 region. Make sure to select an appropriate Windows AMI and use the cust_eu2_instance_sg security group created earlier. Place the instance in one of the customer's subnets.
 
-1. AMI: Amazon Linux 2
-2. Instance type: t2.micro
-3. VPC: cust-eu2-vpc
-4. Subnet: cust-eu2-subnet
-5. Security Group: cust-eu2-sg
-6. Enable "Auto-assign Public IP"
+Once the instance is launched and running, retrieve the Administrator password from the AWS Management Console. You will need the private key associated with the key pair specified during instance creation to decrypt the password.
 
-SSH into the customer's EC2 instance using the key pair created in step 2.
+Connect to the Windows EC2 instance using Remote Desktop Protocol (RDP). Use the decrypted Administrator password and the instance's public IP address to establish the connection.
 
-Once logged in, install curl with the following command:
-```
-sudo yum install -y curl
-```
+Once connected to the instance, open a web browser such as Internet Explorer or Microsoft Edge, and visit the SaaS provider's static website using the internal load balancer DNS name retrieved from the output of Terraform in step 7. You should see the "Hello World" header and the "AWS Cross-region privatelink using VPC peering, successful" content, indicating that the connection through the PrivateLink is working as expected.
 
-Now, use curl to access the SaaS provider's static website via the VPC endpoint:
-```
-curl http://<VPC_ENDPOINT_DNS_NAME>:80
-```
-Replace <VPC_ENDPOINT_DNS_NAME> with the actual DNS name of the VPC endpoint created in step 7. You can find the DNS name in the AWS Management Console under the "VPC" service, "Endpoints" section.
+By completing step 8, you have successfully tested the PrivateLink connection from the customer's environment in the EU-WEST-2 region to the SaaS provider's static website in the EU-WEST-1 region.
 
-If the connection is successful, you should see the content of the SaaS provider's static website displayed in the command output.
-
-By completing step 8, you have successfully tested the connection between the customer's VPC endpoint and the SaaS provider's static website. The customer can now securely access the SaaS provider's platform over AWS PrivateLink, even though the platform is only deployed in the EU-WEST-1 region.
 
 **<h3></h3>**
