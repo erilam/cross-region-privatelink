@@ -72,34 +72,37 @@ In this step, we will create a Terraform configuration file to store all the nec
 Create a file called variables.tf and include the following variables:
 
 ```
-variable "sp_eu1_ami_id" {
-  description = "The SaaS provider's Amazon Machine Image (AMI) ID in the EU-WEST-1 region"
-  default     = "ami-12345678" # Replace with the actual AMI ID for your setup
+variable "sp_eu1_ami_ssm_parameter_name" {
+  description = "The SSM parameter name for the SaaS provider's EC2 AMI in the EU-WEST-1 region"
+  default     = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
 }
 
 variable "sp_instance_type" {
-  description = "The EC2 instance type for the SaaS provider's static website"
-  default     = "t2.micro"
-}
-
-variable "cust_ami_id" {
-  description = "The customer's Amazon Machine Image (AMI) ID in the EU-WEST-2 region"
-  default     = "ami-abcdefgh" # Replace with the actual AMI ID for your setup
-}
-
-variable "cust_instance_type" {
-  description = "The EC2 instance type for the customer's test instance"
+  description = "EC2 instance type for the SaaS provider's static website"
   default     = "t2.micro"
 }
 
 variable "sp_key_pair_name" {
-  description = "The name of the key pair for the SaaS provider's instances"
-  default     = "sp-key-pair"
+  description = "The name of the key pair for the SaaS provider's EC2 instances"
 }
 
-variable "cust_key_pair_name" {
-  description = "The name of the key pair for the customer's instances"
-  default     = "cust-key-pair"
+variable "sp_eu1_vpc_cidr" {
+  description = "The CIDR block for the SaaS provider's VPC in EU-WEST-1 region"
+  default     = "10.0.0.0/16"
+}
+
+variable "sp_eu1_subnet_cidrs" {
+  description = "The CIDR blocks for the SaaS provider's subnets in EU-WEST-1 region"
+  default = {
+    "subnet_a" = "10.0.1.0/24"
+    "subnet_b" = "10.0.2.0/24"
+    "subnet_c" = "10.0.3.0/24"
+  }
+}
+
+variable "aws_profile" {
+  description = "AWS CLI profile to use for the SaaS provider and customer accounts"
+  default     = "default"
 }
 ```
 
@@ -113,7 +116,7 @@ Create a file called sp_eu1_infra.tf and add the following code:
 resource "aws_vpc" "sp_eu1_vpc" {
   provider = aws.sp_eu1
 
-  cidr_block = "10.0.0.0/16"
+  cidr_block = var.sp_eu1_vpc_cidr
 
   tags = {
     Name = "sp-eu1-vpc"
@@ -121,13 +124,14 @@ resource "aws_vpc" "sp_eu1_vpc" {
 }
 
 resource "aws_subnet" "sp_eu1_subnet" {
+  count    = length(var.sp_eu1_subnet_cidrs)
   provider = aws.sp_eu1
 
-  cidr_block = "10.0.1.0/24"
+  cidr_block = element(values(var.sp_eu1_subnet_cidrs), count.index)
   vpc_id     = aws_vpc.sp_eu1_vpc.id
 
   tags = {
-    Name = "sp-eu1-subnet"
+    Name = "sp-eu1-subnet-${element(keys(var.sp_eu1_subnet_cidrs), count.index)}"
   }
 }
 
@@ -151,13 +155,25 @@ resource "aws_security_group_rule" "sp_eu1_sg_allow_http" {
   cidr_blocks = ["0.0.0.0/0"]
 }
 
+data "aws_ssm_parameter" "sp_eu1_ami_id" {
+  name = var.sp_eu1_ami_ssm_parameter_name
+}
+
 resource "aws_launch_configuration" "sp_eu1_lc" {
   provider = aws.sp_eu1
 
   name_prefix = "sp-eu1-lc"
-  image_id    = var.sp_eu1_ami_id
+  image_id    = data.aws_ssm_parameter.sp_eu1_ami_id.value
   instance_type = var.sp_instance_type
   key_name      = var.sp_key_pair_name
+
+  user_data = <<-EOF
+                #!/bin/bash
+                yum install -y httpd
+                systemctl start httpd
+                systemctl enable httpd
+                echo "<h1>Hello World</h1><p>AWS Cross region privatelink using vpc peering, successful</p>" > /var/www/html/index.html
+              EOF
 
   security_groups = [aws_security_group.sp_eu1_sg.id]
 
@@ -174,7 +190,7 @@ resource "aws_autoscaling_group" "sp_eu1_asg" {
   min_size    = 1
   desired_capacity = 2
 
-  vpc_zone_identifier = [aws_subnet.sp_eu1_subnet.id]
+  vpc_zone_identifier = aws_subnet.sp_eu1_subnet.*.id
   launch_configuration = aws_launch_configuration.sp_eu1_lc.name
 
   lifecycle {
@@ -182,9 +198,10 @@ resource "aws_autoscaling_group" "sp_eu1_asg" {
   }
 }
 ```
+
 Run terraform init to initialize the Terraform working directory, followed by terraform apply to deploy the SaaS provider's infrastructure in the EU-WEST-1 region.
 
-By completing step 3, you have successfully deployed the SaaS provider's infrastructure, including a VPC, autoscaling group, and security group, in the EU-WEST-1 region using Terraform.
+By completing step 3, you have successfully deployed the SaaS provider's infrastructure, including a VPC, autoscaling group, and security group, in the EU-WEST-1 region using Terraform. The infrastructure now has three subnets in separate availability zones, the AMI is looked up using SSM parameter, and the user data script installs the static website with the specified header and content on the EC2 instances.
 
 **<h3>Step 4: Establish VPC peering between the SaaS provider's EU-WEST-1 and EU-WEST-2 regions</h3>**
 In this step, we will create VPC peering between the SaaS provider's EU-WEST-1 and EU-WEST-2 regions. This allows the SaaS provider to create an endpoint service in the EU-WEST-2 region to be accessed by customers over AWS PrivateLink.
