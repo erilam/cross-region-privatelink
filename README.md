@@ -84,6 +84,7 @@ variable "sp_instance_type" {
 
 variable "sp_key_pair_name" {
   description = "The name of the key pair for the SaaS provider's EC2 instances"
+  default     = "sp_ec2_key_name"
 }
 
 variable "sp_eu1_vpc_cidr" {
@@ -109,10 +110,34 @@ variable "aws_profile" {
 By completing step 2, you have created a Terraform configuration file containing all the necessary variables for our cross-region VPC PrivateLink setup. These variables include default values for the SaaS provider's EU-WEST-1 and customer's EU-WEST-2 regions, which can be modified as needed for your specific setup.
 
 **<h3>Step 3: Deploy the SaaS provider's infrastructure in the EU-WEST-1 region</h3>**
-In this step, we will deploy the SaaS provider's infrastructure in the EU-WEST-1 region. This includes creating a VPC, an autoscaling group with EC2 instances, and a security group. Since ec2 and autoscaling creation is not the focus of this blog post, so we will use a single AZ as an example. In a production environment, to ensure proper reliability, you should consider a Multi-AZ solution. We will use Terraform to automate the creation of these resources.
+In this step, we will deploy the SaaS provider's infrastructure in the EU-WEST-1 region, create the EC2 key pair, and store it in AWS Secrets Manager. This includes creating a VPC, an autoscaling group with EC2 instances, and a security group. We will use Terraform to automate the creation of these resources.
 
 Create a file called sp_eu1_infra.tf and add the following code:
 ```
+resource "tls_private_key" "sp_eu1_key" {
+  algorithm = "RSA"
+}
+
+resource "aws_key_pair" "sp_eu1_key" {
+  provider = aws.sp_eu1
+
+  key_name   = var.sp_key_pair_name
+  public_key = tls_private_key.sp_eu1_key.public_key_openssh
+}
+
+resource "aws_secretsmanager_secret" "sp_eu1_key_secret" {
+  provider = aws.sp_eu1
+
+  name = "${var.sp_key_pair_name}_private_key"
+}
+
+resource "aws_secretsmanager_secret_version" "sp_eu1_key_secret_version" {
+  provider = aws.sp_eu1
+
+  secret_id     = aws_secretsmanager_secret.sp_eu1_key_secret.id
+  secret_string = tls_private_key.sp_eu1_key.private_key_pem
+}
+
 resource "aws_vpc" "sp_eu1_vpc" {
   provider = aws.sp_eu1
 
@@ -139,7 +164,7 @@ resource "aws_security_group" "sp_eu1_sg" {
   provider = aws.sp_eu1
 
   name        = "sp-eu1-sg"
-  description = "Security group for the SaaS provider's static website in EU-WEST-1"
+  description = "Security group for the SaaS provider static website in EU-WEST-1"
   vpc_id      = aws_vpc.sp_eu1_vpc.id
 }
 
@@ -201,7 +226,7 @@ resource "aws_autoscaling_group" "sp_eu1_asg" {
 
 Run terraform init to initialize the Terraform working directory, followed by terraform apply to deploy the SaaS provider's infrastructure in the EU-WEST-1 region.
 
-By completing step 3, you have successfully deployed the SaaS provider's infrastructure, including a VPC, autoscaling group, and security group, in the EU-WEST-1 region using Terraform. The infrastructure now has three subnets in separate availability zones, the AMI is looked up using SSM parameter, and the user data script installs the static website with the specified header and content on the EC2 instances.
+By completing step 3, you have successfully deployed the SaaS provider's infrastructure, including a VPC, autoscaling group, and security group, in the EU-WEST-1 region using Terraform. You have also created the EC2 key pair and stored it in AWS Secrets Manager. The infrastructure now has three subnets in separate availability zones, the AMI is looked up using SSM parameter, and the user data script installs the static website with the specified header and content on the EC2 instances.
 
 **<h3>Step 4: Establish VPC peering between the SaaS provider's EU-WEST-1 and EU-WEST-2 regions</h3>**
 In this step, we will create VPC peering between the SaaS provider's EU-WEST-1 and EU-WEST-2 regions. This allows the SaaS provider to create an endpoint service in the EU-WEST-2 region to be accessed by customers over AWS PrivateLink.
@@ -297,7 +322,7 @@ resource "aws_lb" "sp_eu2_lb" {
   name               = "sp-eu2-lb"
   internal           = true
   load_balancer_type = "network"
-  subnets            = [aws_vpc.sp_eu2_vpc.id]
+  subnets            = aws_subnet.sp_eu2_subnet.*.id
 
   tags = {
     Name = "sp-eu2-lb"
