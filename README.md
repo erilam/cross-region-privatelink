@@ -300,7 +300,7 @@ resource "aws_security_group" "sp_eu2_sg" {
   provider = aws.sp_eu2
 
   name        = "sp-eu2-sg"
-  description = "Security group for the SaaS provider's static website in EU-WEST-2"
+  description = "Security group for the SaaS provider static website in EU-WEST-2"
   vpc_id      = aws_vpc.sp_eu2_vpc.id
 }
 
@@ -314,6 +314,20 @@ resource "aws_security_group_rule" "sp_eu2_sg_allow_http" {
   to_port     = 80
   protocol    = "tcp"
   cidr_blocks = ["0.0.0.0/0"]
+}
+
+resource "aws_subnet" "sp_eu2_subnet" {
+  provider = aws.sp_eu2
+
+  count = 3
+
+  cidr_block        = "10.1.${count.index + 1}.0/24"
+  vpc_id            = aws_vpc.sp_eu2_vpc.id
+  availability_zone = "eu-west-2${count.index == 0 ? "a" : count.index == 1 ? "b" : "c"}"
+
+  tags = {
+    Name = "sp-eu2-subnet-${count.index + 1}"
+  }
 }
 
 resource "aws_lb" "sp_eu2_lb" {
