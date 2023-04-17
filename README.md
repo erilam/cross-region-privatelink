@@ -395,6 +395,9 @@ resource "aws_vpc" "cust_eu2_vpc" {
 
   cidr_block = "10.1.0.0/16"
 
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
   tags = {
     Name = "cust-eu2-vpc"
   }
@@ -415,7 +418,7 @@ resource "aws_security_group" "cust_eu2_sg" {
   provider = aws.cust_eu2
 
   name        = "cust-eu2-sg"
-  description = "Security group for the customer's instances in EU-WEST-2"
+  description = "Security group for the customer instances in EU-WEST-2"
   vpc_id      = aws_vpc.cust_eu2_vpc.id
 }
 
@@ -429,6 +432,38 @@ resource "aws_security_group_rule" "cust_eu2_sg_allow_rdp" {
   to_port     = 3389
   protocol    = "tcp"
   cidr_blocks = ["0.0.0.0/0"]
+}
+
+resource "aws_internet_gateway" "cust_eu2_igw" {
+  provider = aws.cust_eu2
+
+  vpc_id = aws_vpc.cust_eu2_vpc.id
+
+  tags = {
+    Name = "cust-eu2-igw"
+  }
+}
+
+resource "aws_route_table" "cust_eu2_route_table" {
+  provider = aws.cust_eu2
+
+  vpc_id = aws_vpc.cust_eu2_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.cust_eu2_igw.id
+  }
+
+  tags = {
+    Name = "cust-eu2-route-table"
+  }
+}
+
+resource "aws_route_table_association" "cust_eu2_route_table_association" {
+  provider = aws.cust_eu2
+
+  subnet_id      = aws_subnet.cust_eu2_subnet.id
+  route_table_id = aws_route_table.cust_eu2_route_table.id
 }
 ```
 Run terraform init to initialize the Terraform working directory, followed by terraform apply to deploy the customer's infrastructure in the EU-WEST-2 region.
@@ -445,31 +480,32 @@ Create a file called cust_eu2_vpc_endpoint.tf and add the following code:
 resource "aws_vpc_endpoint" "cust_eu2_vpc_endpoint" {
   provider = aws.cust_eu2
 
-  vpc_id              = aws_vpc.cust_eu2_vpc.id
-  vpc_endpoint_type   = "Interface"
-  service_name        = aws_vpc_endpoint_service.sp_eu2_endpoint_service.service_name
-  subnet_ids          = [aws_subnet.cust_eu2_subnet.id]
-  security_group_ids  = [aws_security_group.cust_eu2_sg.id]
-  private_dns_enabled = true
+  vpc_id            = aws_vpc.cust_eu2_vpc.id
+  service_name      = aws_vpc_endpoint_service.sp_eu2_endpoint_service.service_name
+  vpc_endpoint_type = "Interface"
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action   = "*"
-        Effect   = "Allow"
-        Resource = "*"
-        Principal = {
-          AWS = "arn:aws:iam::<SAAS_PROVIDER_ACCOUNT_ID>:root" # Replace <SAAS_PROVIDER_ACCOUNT_ID> with the actual SaaS provider's AWS account ID
-        }
-      }
-    ]
-  })
+  subnet_ids = [
+    aws_subnet.cust_eu2_subnet.id
+  ]
+
+  security_group_ids = [
+    aws_security_group.cust_eu2_sg.id
+  ]
 
   tags = {
     Name = "cust-eu2-vpc-endpoint"
   }
 }
+
+output "vpce_service_id" {
+  value = aws_vpc_endpoint_service.sp_eu2_endpoint_service.id
+}
+
+output "vpc_endpoint_id" {
+  value = aws_vpc_endpoint.cust_eu2_vpc_endpoint.id
+}
+
+
 ```
 Run terraform apply to create the VPC endpoint in the customer's EU-WEST-2 region and connect it to the SaaS provider's endpoint service.
 
