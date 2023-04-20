@@ -724,7 +724,7 @@ resource "aws_vpc_endpoint" "cust_eu2_private_link" {
 ```
 Run terraform init to initialize the Terraform working directory, followed by terraform apply to deploy the customer's infrastructure in the EU-WEST-2 region.
 
-Follow this [link](https://docs.aws.amazon.com/vpc/latest/privatelink/configure-endpoint-service.html) to accept the VPC endpoint connection in the SaaS provider account.
+Follow this [link](https://docs.aws.amazon.com/vpc/latest/privatelink/configure-endpoint-service.html#accept-reject-connection-requests) to accept the VPC endpoint connection in the SaaS provider account.
 
 By completing step 6, you have successfully set up the customer's infrastructure in the EU-WEST-2 region, including a VPC and security group, using Terraform.
 
