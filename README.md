@@ -724,20 +724,23 @@ resource "aws_vpc_endpoint" "cust_eu2_private_link" {
 ```
 Run terraform init to initialize the Terraform working directory, followed by terraform apply to deploy the customer's infrastructure in the EU-WEST-2 region.
 
+Follow this link [title](https://docs.aws.amazon.com/vpc/latest/privatelink/configure-endpoint-service.html) to accept the VPC endpoint connection in the SaaS provider account.
+
 By completing step 6, you have successfully set up the customer's infrastructure in the EU-WEST-2 region, including a VPC and security group, using Terraform.
 
 **<h3>Step 7: Test the connection between the customer's VPC endpoint and the SaaS provider's static website</h3>**
 To test the connectivity between the customer's VPC and the SaaS provider's application through AWS PrivateLink, follow these steps:
 
-1. Launch an EC2 instance in one of the customer's subnets in the eu-west-2 region. Make sure to associate the instance with the security group (aws_security_group.cust_eu2_sg) created in step 6.
+1. Launch an EC2 instance in one of the customer's subnets in the eu-west-2 region. Make sure to associate the instance with the security group that allow ssh for ingress and port 80 for egress.
 2. Log in to the EC2 instance using SSH and install any necessary tools, such as curl, to make HTTP requests.
 3. Obtain the DNS name of the VPC endpoint (aws_vpc_endpoint.cust_eu2_private_link) created in step 6. You can find this information in the AWS Management Console or by querying the AWS CLI or SDK.
-4. Use curl or another tool of your choice to send an HTTP request to the SaaS provider's application using the VPC endpoint's DNS name.
-Verify that you receive a valid response from the SaaS provider's application.
+4. Use curl or another tool of your choice to send an HTTP request to the SaaS provider's application using the VPC endpoint's DNS name. Verify that you receive a valid response from the SaaS provider's application.
 
-You can either launch the ec2 in customer vpc's public subnet or create the ssm, ssmmessage and ec2messagr vpc endpoint in customer vpc and use SSM Session Manager to connect to the private ec2.
+You can either launch the ec2 in customer vpc's public subnet or create the ssm, ssmmessage and ec2messagr vpc endpoint in customer vpc and use SSM Session Manager to connect to the private testing ec2.
 
 **<h3>Conclusion</h3>**
 In this blog post, we walked through the process of setting up AWS PrivateLink to securely connect a customer's VPC to a SaaS provider's application hosted in a different AWS region. By following the six steps provided, you can ensure low-latency communication and enhance the security of data in transit between the customer and the SaaS provider.
 
 AWS PrivateLink offers a robust solution for SaaS providers to deliver their applications securely to customers while minimizing the exposure of sensitive data to the public internet. By leveraging the power of AWS networking and infrastructure, both customers and SaaS providers can benefit from secure, reliable, and high-performance access to critical applications and services.
+
+To further optimize this setup, you can review all the IAM policies and security group rules to ensure the principle of least privilege is applied. This will help you maintain a more secure environment by granting only the necessary permissions for each component in your infrastructure.
